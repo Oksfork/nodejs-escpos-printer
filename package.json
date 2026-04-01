@@ -1,20 +1,60 @@
 {
-  "name": "nodejs-escpos-printer",
+  "name": "electron-escpos-printer",
   "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
+  "description": "Aplicación de escritorio para impresión térmica",
+  "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "electron",
+    "printer",
+    "thermal",
+    "escpos"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
+    "dayjs": "^1.11.13",
     "express": "^4.21.2",
+    "fetch": "^1.1.0",
     "node-thermal-printer": "^4.4.4",
-    "os": "^0.1.2"
+    "node-windows": "^1.0.0-beta.8",
+    "os": "^0.1.2",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "build": {
+    "appId": "com.molab.printer",
+    "productName": "Molab Printer",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "renderer/**/*",
+      "printer-service.js",
+      "config.json",
+      "images/**/*",
+      "!images/logo/logo.png",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "images/logo/molab_app_logo.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

@@ -1,0 +1,294 @@
+const express = require("express");
+const { exec } = require("child_process");
+const path = require('path');
+const fs = require('fs');
+const cors = require("cors");
+const os = require("os");
+const { ThermalPrinter, PrinterTypes, CharacterSet } = require("node-thermal-printer");
+
+const app = express();
+
+
+app.use(express.json());
+app.use(cors());
+
+
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    next();
+});
+
+const PORT = 8181;
+
+function getDynamicWidths(data) {
+  // estimaciones por cantidad de caracteres promedio
+  let maxCantidad = 0, maxPrecio = 0, maxTotal = 0, maxDesc = 0;
+
+  data.forEach(item => {
+    maxCantidad = Math.max(maxCantidad, `${item?.cantidad}`.length);
+    maxPrecio = Math.max(maxPrecio, `${formatNumber(item?.precio)}`.length);
+    const total = formatNumber(Number(item?.cantidad) * Number(item?.precio));
+    maxTotal = Math.max(maxTotal, `${total}`.length);
+    maxDesc = Math.max(maxDesc, `${item?.trabajo?.descripcion}`.length);
+  });
+
+  const totalLength = maxCantidad + maxPrecio + maxTotal + maxDesc;
+  
+  return {
+    cantidad: maxCantidad / totalLength,
+    precio: maxPrecio / totalLength,
+    total: maxTotal / totalLength,
+    desc: maxDesc / totalLength
+  };
+}
+
+
+const getPrinters = (callback) => {
+  exec('wmic printer get Name,DriverName,Shared', (error, stdout) => {
+    if (error) {
+      callback({ error: error.message });
+      return;
+    }
+
+    const lines = stdout.split("\n").slice(1).map(line => line.trim()).filter(line => line);
+    const printers = lines.map(line => {
+      const [name, driverName, shared] = line.split(/\s{2,}/);
+      return {
+        name,
+        driver: driverName,
+        shared: shared === 'TRUE'
+      };
+    });
+
+    const thermalPrinters = printers.filter(p => p.shared).map((item) => item.driver);
+
+    callback(thermalPrinters);
+  });
+};
+
+function truncate(text = '', maxLength = 20) {
+  return text.length > maxLength ? text.slice(0, maxLength - 1) + '…' : text;
+}
+
+function formatNumber(value, maxLength = 6) {
+  const num = Number(value ?? 0);
+  const formatted = num.toFixed(2);
+  if (formatted.length <= maxLength) {
+    return formatted.padStart(maxLength);
+  } else {
+    // Truncar con punto final para indicar corte
+    return formatted.slice(0, maxLength - 1) + '…';
+  }
+}
+
+function getImagePath() {
+  const exePath = path.dirname(process.execPath);
+  const imagePath = path.join(exePath, "images", "logo", "logo.png");
+
+  if (fs.existsSync(imagePath)) {
+    return { ok: true, path: imagePath };
+  } else {
+    // fallback: podemos devolver null o ruta de un logo genérico
+    return { ok: false, reason: "no_logo" };
+  }
+}
+
+
+
+
+
+function getConfig() {
+  try {
+    const exePath = path.dirname(process.execPath);
+    const configPath = path.join(exePath, "config.json");
+
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      return config || "Molab Impresion";
+    } else {
+      return "Molab Impresiones";
+    }
+  } catch (err) {
+    console.error("Error leyendo configuración:", err);
+    return "Aplicación";
+  }
+}
+
+app.get('/impresoras', (req, res) => {
+    getPrinters(printers => res.json({ printers }));
+});
+
+app.post("/finish_order_print", async(req, res) => {
+    try {
+
+        const { _printer, orden, items } = req.body;
+
+        const hostname = os.hostname();
+        const dayjs = require('dayjs');
+        // const imagePath = path.join(__dirname, 'images', 'logo', 'amenabar-Photoroom.png');
+        const result = await getImagePath();
+        const appConfig = await getConfig();
+        let printer = new ThermalPrinter({
+            type: PrinterTypes.EPSON,
+            interface: `\\\\${hostname}\\${_printer}`,
+            driver: "printer"
+        });
+
+        console.log("Resultado de la imagen:", result);
+        
+        if (result.ok) {
+          const path = result.path;
+          await printer.printImage(path);
+        } else {
+          // Fallback: imprimir nombre
+          printer.setTypeFontB();
+          printer.setTextDoubleHeight();
+          printer.setTextDoubleWidth();
+          printer.println(appConfig.appName);
+        }
+
+        printer.setTypeFontB();
+        printer.setTextDoubleHeight();
+        printer.setTextDoubleWidth();
+        printer.println(`Remito: ${orden?.id} `);
+        printer.setTextNormal();
+        printer.println(`Fecha: ${dayjs().format('DD/MM/YYYY')}`);
+        printer.setTypeFontB();
+        printer.setTextDoubleHeight();
+        printer.setTextDoubleWidth();
+        printer.alignCenter();
+        printer.setTextSize(3,3);
+        printer.newLine();
+        printer.println(`X`);
+        printer.alignLeft();
+        printer.setTextNormal();
+        printer.println("Documento NO Valido como factura");
+        printer.println("------------------------------");
+        printer.println(`TD/LAB: ${orden?.cliente?.apellido} ${orden?.cliente?.nombre}`);
+        printer.setTextNormal();
+        printer.println(`${orden?.cliente?.telefono ?? 'S/Telefono'} - ${orden?.cliente?.email ?? 'Sin emal'}`); 
+        printer.println(`${orden?.cliente?.direccion ?? 'S/Direccion'} ${orden?.cliente?.localidad ?? 'Sin Localidad'}`); 
+        printer.println(`${orden?.cliente?.provincia?.nombre ?? 'S/Provincia'}`);
+        if(orden?.profesional){
+          printer.println(`Prof: ${orden?.profesional?.nombre ?? ''} ${orden?.profesional?.apellido ?? ''}`);
+          printer.println(`${orden?.profesional?.telefono ?? 'S/Telefono'}`);
+          printer.println(`${orden?.profesional?.email ?? 'S/Email'}`);
+        }
+        else{
+          printer.println('Prof: N/Profesional');
+        }
+        printer.setTextNormal();
+        printer.println(`Pac: ${orden?.paciente?.apellido} ${orden?.paciente?.nombre}`);
+        printer.println("------------------------------");
+        if (Array.isArray(items) && items.length > 0) {
+          items.map(item => {
+            printer.println(`${item?.cantidad} ${item?.trabajo?.descripcion}`);
+            printer.println(`$${formatNumber(Number(item?.cantidad) * Number(item?.precio), 10) ?? '-'}`)
+          });
+        }
+        printer.drawLine();
+        printer.bold(true);
+        printer.println(`Prec. Total: ${orden?.total}`);
+        printer.bold(false);
+        // thermalPrinter.println(`Este ticket/Rto --------> 42600`);
+        // thermalPrinte.drawLine();
+        if(appConfig.contactoTecnico || appConfig.contactoLaboratorio || appConfig.diasVencimiento){
+          printer.println("----------> Mensajes <--------");
+        }
+        if(appConfig.diasVencimiento){
+          printer.println(`Cta/Ctes Vncen EL ${appConfig.diasVencimiento} DE CADA MES`);
+        }
+        if(appConfig.contactoTecnico){
+          printer.println(`Cto Tecnico: ${appConfig.contactoTecnico}`);
+        }
+        if(appConfig.contactoLaboratorio){
+          printer.println(`Laboratorio: ${appConfig.contactoLaboratorio}`);
+        }
+        if(appConfig.contactoLaboratorio || appConfig.contactoTecnico || appConfig.diasVencimiento){
+          printer.println("------------------------------");
+        }
+
+        // thermalPrinter.code128("Code128", {
+        //   width: "LARGE",          
+        //   height: 80,              
+        //   text: 2                  
+        // });
+        printer.cut(); 
+
+        let execute = await printer.execute();
+        console.log("✅ Impresión completada");
+        return res.json({ message: "Impresión enviada correctamente" });
+        
+    } catch (error) {
+      console.log("error", error);
+        return res.status(500).json({ error: error });
+    }
+})
+
+app.post("/print", async (req, res) => {
+    try {
+        const { _ot_id, _printer, doctor, paciente, items , fechasalida, prof } = req.body;
+
+        const hostname = os.hostname();
+      
+        const dayjs = require('dayjs');
+        require('dayjs/locale/es');
+        dayjs.locale('es'); 
+        const fechaFormateada = dayjs(fechasalida).format('dddd, DD/MM/YYYY');
+
+        let printer = new ThermalPrinter({
+            type: PrinterTypes.EPSON,
+            interface: `\\\\${hostname}\\${_printer}`,
+            driver: "printer",
+        });
+        
+        printer.setTextSize(1, 1);
+
+        printer.alignLeft();
+        printer.setTypeFontB();
+        printer.setTextDoubleHeight();
+        printer.setTextDoubleWidth();
+        printer.println(`OT: ${_ot_id}`);
+        
+        printer.setTextNormal();
+        printer.setTextNormal();
+        printer.println(`Dr/a: ${doctor}`);
+        printer.println(`Paciente: ${paciente}`);
+        printer.println(`Profesional: ${prof}`);
+        printer.newLine();
+        if (Array.isArray(items) && items.length > 0) {
+          items.map(item => {
+            printer.bold(true);
+            printer.println(`Caso: ${item?.trabajo?.descripcion}`);
+            printer.bold(false);
+            // printer.table([`Cant: ${item?.cantidad ?? '-'}`, `Pza: ${item?.piezas ?? '-'}`, `Col: ${item?.color ?? '-'}`])
+            printer.tableCustom([                                       // Prints table with custom settings (text, align, width, cols, bold)
+              { text:`Cant: ${item?.cantidad ?? '-'}`, align:"LEFT", width:0.20 },
+              { text:`Pza: ${item?.piezas ?? '-'}`, align:"LEFT", width:0.20 },
+              { text:`Col: ${item?.color ?? '-'}`, align:"LEFT", width: 0.20 }
+            ]);
+            printer.newLine();
+          });
+        } else {
+          console.error('items no es un array válido o está vacío:', items);
+        }
+        // printer.println(`Caso: ${caso}`);
+        // printer.println(`Cantidad: ${cantidad}`);
+        printer.newLine();
+        printer.println(`Cntrl: ${fechaFormateada}`)
+        printer.cut();
+
+        let execute = await printer.execute();
+
+        return res.json({ message: "Impresión enviada correctamente" });
+
+    } catch (error) {
+       console.log("error", error);
+        return res.status(500).json({ error: error });
+    }
+});
+
+
+app.listen(PORT, () => {});

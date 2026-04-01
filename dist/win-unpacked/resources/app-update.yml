@@ -1,0 +1,4 @@
+owner: Oksfork
+repo: nodejs-escpos-printer
+provider: github
+updaterCacheDirName: electron-escpos-printer-updater

@@ -1,0 +1,25 @@
+const Service = require('node-windows').Service;
+const path = require('path');
+
+// Crea un nuevo servicio para tu aplicación Node.js
+const svc = new Service({
+  name: 'TeethlabSystemPrinter',
+  description: 'Servicio de impresión TeethlabSystemPrinter',
+  script: path.join(__dirname, 'server.js'),  // Aquí va el archivo principal de tu aplicación
+  execPath: 'node',  // Asegúrate de que el entorno de Node.js esté configurado correctamente
+  env: [
+    {
+      name: "NODE_ENV",
+      value: "production"
+    }
+  ]
+});
+
+// El servicio se instalará automáticamente al ejecutar este script
+svc.on('install', function () {
+  console.log('Servicio instalado y en ejecución...');
+  svc.start();
+});
+
+// Instalar el servicio
+svc.uninstall();

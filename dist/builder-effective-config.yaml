@@ -1,0 +1,21 @@
+directories:
+  output: dist
+  buildResources: build
+appId: com.molab.printer
+productName: Molab Printer
+files:
+  - filter:
+      - main.js
+      - renderer/**/*
+      - printer-service.js
+      - config.json
+      - images/**/*
+      - '!images/logo/logo.png'
+      - node_modules/**/*
+win:
+  target: nsis
+  icon: images/logo/molab_app_logo.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+electronVersion: 28.3.3
