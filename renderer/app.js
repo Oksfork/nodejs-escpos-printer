@@ -224,6 +224,8 @@ function updateConfigForm() {
     document.getElementById('contactoTecnico').value = config.contactoTecnico || '';
     document.getElementById('contactoLaboratorio').value = config.contactoLaboratorio || '';
     document.getElementById('diasVencimiento').value = config.diasVencimiento || '';
+    const sinLogo = document.getElementById('imprimirSinLogo');
+    if (sinLogo) sinLogo.checked = Boolean(config.imprimirSinLogo);
 }
 
 // Manejar envío del formulario de remito
@@ -601,7 +603,8 @@ async function saveSettings() {
             appName: document.getElementById('appName').value,
             contactoTecnico: document.getElementById('contactoTecnico').value,
             contactoLaboratorio: document.getElementById('contactoLaboratorio').value,
-            diasVencimiento: document.getElementById('diasVencimiento').value
+            diasVencimiento: document.getElementById('diasVencimiento').value,
+            imprimirSinLogo: document.getElementById('imprimirSinLogo')?.checked === true
         };
         
         // Verificar que electronAPI esté disponible

@@ -57,7 +57,7 @@
                         <div class="settings-section">
                             <h3>Información de la Empresa</h3>
                             <div class="form-group">
-                                <label for="appName">Nombre de la Aplicación:</label>
+                                <label for="appName">Nombre de Empresa:</label>
                                 <input type="text" id="appName" placeholder="Molab Impresiones">
                             </div>
                             <div class="form-group">
@@ -74,45 +74,58 @@
                             </div>
                         </div>
                         
-                        <div class="settings-section">
+                        <div class="settings-section logo-empresa-section">
                             <h3>Logo de la Empresa</h3>
-                            <div class="logo-section">
-                                <div class="current-logo">
-                                    <h4>Logo Actual:</h4>
-                                    <div class="logo-preview" id="logoPreview">
-                                        <img id="currentLogoImage" src="" alt="Logo actual" style="display: none;">
-                                        <div class="no-logo" id="noLogoMessage">
-                                            <i class="fas fa-image"></i>
-                                            <span>No hay logo configurado</span>
+                            <div class="logo-config-stack">
+                                <label class="settings-toggle-card" for="imprimirSinLogo">
+                                    <input type="checkbox" id="imprimirSinLogo" class="settings-toggle-input">
+                                    <span class="settings-toggle-switch" aria-hidden="true">
+                                        <span class="settings-toggle-knob"></span>
+                                    </span>
+                                    <span class="settings-toggle-copy">
+                                        <span class="settings-toggle-title">Imprimir sin logo</span>
+                                        <span class="settings-toggle-desc">Usa solo el nombre de empresa como encabezado, sin imagen en el ticket.</span>
+                                    </span>
+                                </label>
+
+                                <div class="logo-section">
+                                    <div class="current-logo">
+                                        <h4>Logo actual</h4>
+                                        <div class="logo-preview" id="logoPreview">
+                                            <img id="currentLogoImage" src="" alt="Logo actual" style="display: none;">
+                                            <div class="no-logo" id="noLogoMessage">
+                                                <i class="fas fa-image"></i>
+                                                <span>No hay logo configurado</span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                
-                                <div class="logo-upload">
-                                    <h4>Cambiar Logo:</h4>
-                                    <div class="upload-area" id="uploadArea">
-                                        <input type="file" id="logoFileInput" accept=".png" style="display: none;">
-                                        <div class="upload-content">
-                                            <i class="fas fa-cloud-upload-alt"></i>
-                                            <p>Haz clic para seleccionar un archivo PNG</p>
-                                            <small>Solo se aceptan archivos PNG. Se redimensionará automáticamente a 300x110px</small>
+
+                                    <div class="logo-upload">
+                                        <h4>Subir nuevo logo</h4>
+                                        <div class="upload-area" id="uploadArea">
+                                            <input type="file" id="logoFileInput" accept=".png" style="display: none;">
+                                            <div class="upload-content">
+                                                <i class="fas fa-cloud-upload-alt"></i>
+                                                <p>Seleccionar archivo PNG</p>
+                                                <small>Se redimensionará automáticamente a 300×110 px</small>
+                                            </div>
                                         </div>
-                                    </div>
-                                    
-                                    <div class="upload-progress" id="uploadProgress" style="display: none;">
-                                        <div class="progress-bar">
-                                            <div class="progress-fill" id="progressFill"></div>
+
+                                        <div class="upload-progress" id="uploadProgress" style="display: none;">
+                                            <div class="progress-bar">
+                                                <div class="progress-fill" id="progressFill"></div>
+                                            </div>
+                                            <span class="progress-text" id="progressText">Procesando...</span>
                                         </div>
-                                        <span class="progress-text" id="progressText">Procesando...</span>
-                                    </div>
-                                    
-                                    <div class="upload-actions" id="uploadActions" style="display: none;">
-                                        <button type="button" class="btn-primary" id="saveLogoBtn">
-                                            <i class="fas fa-save"></i> Guardar Logo
-                                        </button>
-                                        <button type="button" class="btn-secondary" id="cancelLogoBtn">
-                                            <i class="fas fa-times"></i> Cancelar
-                                        </button>
+
+                                        <div class="upload-actions" id="uploadActions" style="display: none;">
+                                            <button type="button" class="btn-primary" id="saveLogoBtn">
+                                                <i class="fas fa-save"></i> Guardar logo
+                                            </button>
+                                            <button type="button" class="btn-secondary" id="cancelLogoBtn">
+                                                <i class="fas fa-times"></i> Cancelar
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

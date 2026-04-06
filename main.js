@@ -39,6 +39,27 @@ let isQuitting = false;
 let httpServer = null;
 const PORT = 8181;
 
+function escposInitialize(printer) {
+  // ESC @ (initialize printer): clears buffer/modes on most ESC/POS compatibles
+  try {
+    printer.add(Buffer.from([0x1b, 0x40]));
+  } catch (e) {
+    // If a given interface/type doesn't support raw add, don't break printing
+    console.warn('No se pudo inicializar ESC/POS (ESC @):', e?.message || e);
+  }
+}
+
+/** Tras imprimir gráficos, forzar salida de modos raros (típico en térmicas viejas). */
+function escposAfterImage(printer) {
+  escposInitialize(printer);
+  try {
+    printer.setTextNormal();
+    printer.alignLeft();
+  } catch (e) {
+    console.warn('escposAfterImage:', e?.message || e);
+  }
+}
+
 function showMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -291,7 +312,6 @@ function startHttpServer() {
     httpServer.on('error', (error) => {
       if (error.code === 'EADDRINUSE') {
         console.log(`⚠️ Puerto ${PORT} ya está en uso`);
-        // Intentar con el siguiente puerto disponible
         const nextPort = PORT + 1;
         httpServer = expressApp.listen(nextPort, () => {
           console.log(`🚀 Servidor HTTP iniciado en puerto ${nextPort}`);
@@ -318,7 +338,6 @@ app.on('will-quit', () => {
   }
 });
 
-// Este método se llamará cuando Electron haya terminado la inicialización
 app.whenReady().then(() => {
   ensureAutoLaunchOnLogin();
   createWindow();
@@ -715,87 +734,77 @@ async function printOrderData(printData) {
       driver: "printer"
     });
 
+    // Start from a known printer state (helps with "jeroglíficos" after graphics)
+    escposInitialize(printer);
+
+    const companyName = appConfig.appName || "Molab Impresiones";
+    const skipLogo = appConfig.imprimirSinLogo === true;
+
     console.log("Resultado de la imagen:", result);
-    console.log("Ruta del logo:", result.path);
-    
-    if (result.ok && result.path) {
-      try {
-        // Verificar nuevamente que el archivo existe antes de imprimir
-        if (fs.existsSync(result.path)) {
-          const stats = fs.statSync(result.path);
-          console.log("Tamaño del archivo logo:", stats.size, "bytes");
-          
-          try {
-            // Intentar imprimir directamente primero - node-thermal-printer puede manejar el PNG
-            await printer.printImage(result.path);
-            console.log("✅ Imagen enviada a la impresora directamente");
-          } catch (directPrintError) {
-            console.warn("Error imprimiendo imagen directamente, intentando procesar:", directPrintError.message);
-            
-            // Si falla, procesar con Jimp
-            const Jimp = require('jimp');
-            
-            // Leer el archivo como buffer primero (Jimp.read necesita buffer, no ruta)
-            const imageBuffer = fs.readFileSync(result.path);
-            const image = await Jimp.read(imageBuffer);
-            
-            console.log("Dimensiones originales:", image.getWidth(), "x", image.getHeight());
-            
-            // Redimensionar a un tamaño adecuado para impresoras térmicas (máximo 384px de ancho típico)
-            const maxWidth = 384;
-            const maxHeight = 200;
-            
-            if (image.getWidth() > maxWidth || image.getHeight() > maxHeight) {
-              image.resize(maxWidth, maxHeight, Jimp.RESIZE_BEZIER);
-              console.log("Imagen redimensionada a:", image.getWidth(), "x", image.getHeight());
-            }
-            
-            // Convertir a escala de grises (mejor para impresoras térmicas)
-            image.greyscale();
-            
-            // Guardar temporalmente la imagen procesada
-            const tempImagePath = path.join(__dirname, "images", "logo", "logo_temp.png");
-            await image.writeAsync(tempImagePath);
-            
-            console.log("Imagen procesada y guardada en:", tempImagePath);
-            
-            // Imprimir la imagen procesada
-            await printer.printImage(tempImagePath);
-            console.log("✅ Imagen procesada y enviada a la impresora");
-            
-            // Limpiar archivo temporal después de un delay
-            setTimeout(() => {
-              try {
-                if (fs.existsSync(tempImagePath)) {
-                  fs.unlinkSync(tempImagePath);
-                  console.log("Archivo temporal eliminado");
-                }
-              } catch (cleanupError) {
-                console.warn("No se pudo eliminar archivo temporal:", cleanupError);
-              }
-            }, 5000);
-          }
-          
-        } else {
-          console.warn("El archivo de logo no existe en la ruta:", result.path);
-          throw new Error("Logo file not found");
-        }
-      } catch (imageError) {
-        console.error("Error imprimiendo imagen:", imageError);
-        console.error("Stack trace:", imageError.stack);
-        // Si falla la impresión de la imagen, usar texto como fallback
-        printer.setTypeFontB();
-        printer.setTextDoubleHeight();
-        printer.setTextDoubleWidth();
-        printer.println(appConfig.appName || "Molab Impresiones");
-      }
-    } else {
-      console.log("No hay logo válido, usando texto. Razón:", result.reason);
-      // No hay logo o logo inválido, usar texto
+    console.log("Ruta del logo:", result.path, "imprimirSinLogo:", skipLogo);
+
+    function printCompanyHeaderText() {
       printer.setTypeFontB();
       printer.setTextDoubleHeight();
       printer.setTextDoubleWidth();
-      printer.println(appConfig.appName || "Molab Impresiones");
+      printer.println(companyName);
+    }
+
+    if (!skipLogo && result.ok && result.path && fs.existsSync(result.path)) {
+      const stats = fs.statSync(result.path);
+      console.log("Tamaño del archivo logo:", stats.size, "bytes");
+      let logoPrinted = false;
+      try {
+        try {
+          await printer.printImage(result.path);
+          console.log("✅ Imagen enviada a la impresora directamente");
+          logoPrinted = true;
+        } catch (directPrintError) {
+          console.warn("Error imprimiendo imagen directamente, intentando procesar:", directPrintError.message);
+          const Jimp = require('jimp');
+          const imageBuffer = fs.readFileSync(result.path);
+          const image = await Jimp.read(imageBuffer);
+          console.log("Dimensiones originales:", image.getWidth(), "x", image.getHeight());
+          const maxWidth = 384;
+          const maxHeight = 200;
+          if (image.getWidth() > maxWidth || image.getHeight() > maxHeight) {
+            image.resize(maxWidth, maxHeight, Jimp.RESIZE_BEZIER);
+            console.log("Imagen redimensionada a:", image.getWidth(), "x", image.getHeight());
+          }
+          image.greyscale();
+          const tempImagePath = path.join(__dirname, "images", "logo", "logo_temp.png");
+          await image.writeAsync(tempImagePath);
+          console.log("Imagen procesada y guardada en:", tempImagePath);
+          await printer.printImage(tempImagePath);
+          console.log("✅ Imagen procesada y enviada a la impresora");
+          logoPrinted = true;
+          setTimeout(() => {
+            try {
+              if (fs.existsSync(tempImagePath)) {
+                fs.unlinkSync(tempImagePath);
+                console.log("Archivo temporal eliminado");
+              }
+            } catch (cleanupError) {
+              console.warn("No se pudo eliminar archivo temporal:", cleanupError);
+            }
+          }, 5000);
+        }
+      } catch (imageError) {
+        logError("Error imprimiendo logo, fallback solo texto", imageError);
+        console.error("Stack trace:", imageError.stack);
+        escposInitialize(printer);
+        printCompanyHeaderText();
+      }
+      if (logoPrinted) {
+        escposAfterImage(printer);
+      }
+    } else {
+      if (skipLogo) {
+        console.log("Imprimir sin logo (configuración)");
+      } else {
+        console.log("No hay logo válido, usando texto. Razón:", result.reason);
+      }
+      printCompanyHeaderText();
     }
 
     printer.setTypeFontB();
@@ -837,7 +846,7 @@ async function printOrderData(printData) {
     else{
       printer.println('Pac: N/Paciente');
     }
-
+    printer.println("------------------------------");
     if (Array.isArray(items) && items.length > 0) {
       items.map(item => {
         printer.println(`${item?.cantidad} ${item?.trabajo?.descripcion}`);
@@ -866,7 +875,7 @@ async function printOrderData(printData) {
       printer.println("------------------------------");
     }
 
-    printer.cut(); 
+    printer.cut({ verticalTabAmount: 1 });
     let execute = await printer.execute();
     console.log("✅ Impresión completada");
     
@@ -895,6 +904,9 @@ async function printOTData(printData) {
       interface: `\\\\${hostname}\\${_printer}`,
       driver: "printer",
     });
+
+    // Start from a known printer state
+    escposInitialize(printer);
     
     printer.setTextSize(1, 1);
     printer.alignLeft();
@@ -928,7 +940,7 @@ async function printOTData(printData) {
     
     printer.newLine();
     printer.println(`Cntrl: ${fechaFormateada}`)
-    printer.cut();
+    printer.cut({ verticalTabAmount: 0 });
 
     let execute = await printer.execute();
     return { success: true, message: "Impresión enviada correctamente" };
