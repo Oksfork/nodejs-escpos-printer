@@ -940,7 +940,7 @@ async function printOTData(printData) {
     
     printer.newLine();
     printer.println(`Cntrl: ${fechaFormateada}`)
-    printer.cut({ verticalTabAmount: 0 });
+    printer.cut({ verticalTabAmount: 1 });
 
     let execute = await printer.execute();
     return { success: true, message: "Impresión enviada correctamente" };
