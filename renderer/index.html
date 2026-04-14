@@ -61,6 +61,13 @@
                                 <input type="text" id="appName" placeholder="Molab Impresiones">
                             </div>
                             <div class="form-group">
+                                <label for="paperWidthMm">Ancho de papel:</label>
+                                <select id="paperWidthMm">
+                                    <option value="58">58mm (típico 384px)</option>
+                                    <option value="80">80mm (típico 576px)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
                                 <label for="contactoTecnico">Contacto Técnico:</label>
                                 <input type="text" id="contactoTecnico" placeholder="+54 911 5555-1234">
                             </div>
@@ -69,8 +76,8 @@
                                 <input type="text" id="contactoLaboratorio" placeholder="+54 11 4321-6789">
                             </div>
                             <div class="form-group">
-                                <label for="diasVencimiento">Días de Vencimiento:</label>
-                                <input type="number" id="diasVencimiento" placeholder="24">
+                                <label for="diasVencimiento">Mensaje de vencimiento (Ctas/Ctes):</label>
+                                <textarea id="diasVencimiento" rows="2" placeholder="Ej: Las Ctas/Ctes se vencen 10 días posteriores a los resúmenes"></textarea>
                             </div>
                         </div>
                         

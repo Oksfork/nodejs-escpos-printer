@@ -60,6 +60,17 @@ function escposAfterImage(printer) {
   }
 }
 
+function getPaperConfig(appConfig) {
+  const paperWidthMm = Number(appConfig?.paperWidthMm || 58);
+  const safePaperWidthMm = paperWidthMm === 80 ? 80 : 58;
+  // Typical ESC/POS printable dot widths at 203dpi:
+  // 58mm ≈ 384 dots, 80mm ≈ 576 dots
+  const logoTargetWidthPx = safePaperWidthMm === 80 ? 576 : 384;
+  // Text width is in characters (affects folding/tables). These are practical defaults.
+  const textWidthChars = safePaperWidthMm === 80 ? 72 : 48;
+  return { paperWidthMm: safePaperWidthMm, logoTargetWidthPx, textWidthChars };
+}
+
 function showMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -727,9 +738,11 @@ async function printOrderData(printData) {
     const hostname = os.hostname();
     const result = await getImagePath();
     const appConfig = await getConfig();
+    const paper = getPaperConfig(appConfig);
     
     let printer = new ThermalPrinter({
       type: PrinterTypes.EPSON,
+      width: paper.textWidthChars,
       interface: `\\\\${hostname}\\${_printer}`,
       driver: "printer"
     });
@@ -741,7 +754,7 @@ async function printOrderData(printData) {
     const skipLogo = appConfig.imprimirSinLogo === true;
 
     console.log("Resultado de la imagen:", result);
-    console.log("Ruta del logo:", result.path, "imprimirSinLogo:", skipLogo);
+    console.log("Ruta del logo:", result.path, "imprimirSinLogo:", skipLogo, "paperWidthMm:", paper.paperWidthMm, "logoWidthPx:", paper.logoTargetWidthPx);
 
     function printCompanyHeaderText() {
       printer.setTypeFontB();
@@ -755,40 +768,29 @@ async function printOrderData(printData) {
       console.log("Tamaño del archivo logo:", stats.size, "bytes");
       let logoPrinted = false;
       try {
-        try {
-          await printer.printImage(result.path);
-          console.log("✅ Imagen enviada a la impresora directamente");
-          logoPrinted = true;
-        } catch (directPrintError) {
-          console.warn("Error imprimiendo imagen directamente, intentando procesar:", directPrintError.message);
-          const Jimp = require('jimp');
-          const imageBuffer = fs.readFileSync(result.path);
-          const image = await Jimp.read(imageBuffer);
-          console.log("Dimensiones originales:", image.getWidth(), "x", image.getHeight());
-          const maxWidth = 384;
-          const maxHeight = 200;
-          if (image.getWidth() > maxWidth || image.getHeight() > maxHeight) {
-            image.resize(maxWidth, maxHeight, Jimp.RESIZE_BEZIER);
-            console.log("Imagen redimensionada a:", image.getWidth(), "x", image.getHeight());
-          }
-          image.greyscale();
-          const tempImagePath = path.join(__dirname, "images", "logo", "logo_temp.png");
-          await image.writeAsync(tempImagePath);
-          console.log("Imagen procesada y guardada en:", tempImagePath);
-          await printer.printImage(tempImagePath);
-          console.log("✅ Imagen procesada y enviada a la impresora");
-          logoPrinted = true;
-          setTimeout(() => {
-            try {
-              if (fs.existsSync(tempImagePath)) {
-                fs.unlinkSync(tempImagePath);
-                console.log("Archivo temporal eliminado");
-              }
-            } catch (cleanupError) {
-              console.warn("No se pudo eliminar archivo temporal:", cleanupError);
-            }
-          }, 5000);
+        // Always preprocess logo to a safe width for the configured paper size
+        const Jimp = require('jimp');
+        const imageBuffer = fs.readFileSync(result.path);
+        const image = await Jimp.read(imageBuffer);
+        console.log("Dimensiones originales:", image.getWidth(), "x", image.getHeight());
+
+        const maxHeight = 200;
+        const targetWidth = paper.logoTargetWidthPx;
+        if (image.getWidth() !== targetWidth) {
+          image.resize(targetWidth, Jimp.AUTO, Jimp.RESIZE_BEZIER);
         }
+        if (image.getHeight() > maxHeight) {
+          image.resize(Jimp.AUTO, maxHeight, Jimp.RESIZE_BEZIER);
+        }
+        image.greyscale();
+
+        const tempImagePath = path.join(app.getPath('userData'), "images", "logo", `logo_print_${paper.paperWidthMm}.png`);
+        await image.writeAsync(tempImagePath);
+        console.log("Logo preparado para impresión:", tempImagePath, "->", image.getWidth(), "x", image.getHeight());
+
+        await printer.printImage(tempImagePath);
+        console.log("✅ Logo enviado a la impresora");
+        logoPrinted = true;
       } catch (imageError) {
         logError("Error imprimiendo logo, fallback solo texto", imageError);
         console.error("Stack trace:", imageError.stack);
@@ -862,8 +864,8 @@ async function printOrderData(printData) {
     if(appConfig.contactoTecnico || appConfig.contactoLaboratorio || appConfig.diasVencimiento){
       printer.println("----------> Mensajes <--------");
     }
-    if(appConfig.diasVencimiento){
-      printer.println(`Cta/Ctes Vncen EL ${appConfig.diasVencimiento} DE CADA MES`);
+    if (appConfig.diasVencimiento) {
+      printer.println(String(appConfig.diasVencimiento));
     }
     if(appConfig.contactoTecnico){
       printer.println(`Cto Tecnico: ${appConfig.contactoTecnico}`);
@@ -898,9 +900,12 @@ async function printOTData(printData) {
     const { _ot_id, _printer, doctor, paciente, items, fechasalida, prof } = printData;
     const hostname = os.hostname();
     const fechaFormateada = dayjs(fechasalida).format('dddd, DD/MM/YYYY');
+    const appConfig = await getConfig();
+    const paper = getPaperConfig(appConfig);
 
     let printer = new ThermalPrinter({
       type: PrinterTypes.EPSON,
+      width: paper.textWidthChars,
       interface: `\\\\${hostname}\\${_printer}`,
       driver: "printer",
     });

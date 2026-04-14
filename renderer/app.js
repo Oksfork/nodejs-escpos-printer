@@ -224,6 +224,8 @@ function updateConfigForm() {
     document.getElementById('contactoTecnico').value = config.contactoTecnico || '';
     document.getElementById('contactoLaboratorio').value = config.contactoLaboratorio || '';
     document.getElementById('diasVencimiento').value = config.diasVencimiento || '';
+    const paperWidth = document.getElementById('paperWidthMm');
+    if (paperWidth) paperWidth.value = String(config.paperWidthMm || 58);
     const sinLogo = document.getElementById('imprimirSinLogo');
     if (sinLogo) sinLogo.checked = Boolean(config.imprimirSinLogo);
 }
@@ -601,6 +603,7 @@ async function saveSettings() {
         
         const newConfig = {
             appName: document.getElementById('appName').value,
+            paperWidthMm: Number(document.getElementById('paperWidthMm')?.value || 58),
             contactoTecnico: document.getElementById('contactoTecnico').value,
             contactoLaboratorio: document.getElementById('contactoLaboratorio').value,
             diasVencimiento: document.getElementById('diasVencimiento').value,
