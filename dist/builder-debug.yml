@@ -103,8 +103,8 @@ nsis:
     !macroend
 
     !addplugindir /x86-unicode "C:\Users\obito\AppData\Local\electron-builder\Cache\nsis\nsis-resources-3.4.1\plugins\x86-unicode"
-    !include "C:\Users\obito\AppData\Local\Temp\t-8U4PM5\1-messages.nsh"
-    !include "C:\Users\obito\AppData\Local\Temp\t-8U4PM5\0-messages.nsh"
+    !include "C:\Users\obito\AppData\Local\Temp\t-Jf0sF1\1-messages.nsh"
+    !include "C:\Users\obito\AppData\Local\Temp\t-Jf0sF1\0-messages.nsh"
 
     Var newStartMenuLink
     Var oldStartMenuLink

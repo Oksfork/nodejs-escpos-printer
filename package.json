@@ -1,6 +1,6 @@
 {
   "name": "electron-escpos-printer",
-  "version": "1.0.0",
+  "version": "1.6.2",
   "description": "Aplicación de escritorio para impresión térmica",
   "main": "main.js",
   "scripts": {

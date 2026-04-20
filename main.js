@@ -39,6 +39,36 @@ let isQuitting = false;
 let httpServer = null;
 const PORT = 8181;
 
+// Serialize print jobs per printer to avoid mixed ESC/POS states
+const printQueues = new Map();
+
+function normalizePrinterKey(printerName) {
+  const key = String(printerName || '').trim();
+  return key.length ? key : '__unknown_printer__';
+}
+
+function enqueuePrintJob(printerName, jobFn) {
+  const key = normalizePrinterKey(printerName);
+  const prev = printQueues.get(key) || Promise.resolve();
+
+  // Always continue the chain even if a job fails
+  const next = prev
+    .catch(() => undefined)
+    .then(() => jobFn());
+
+  printQueues.set(
+    key,
+    next.finally(() => {
+      // Clean up if this is still the tail
+      if (printQueues.get(key) === next) {
+        printQueues.delete(key);
+      }
+    })
+  );
+
+  return next;
+}
+
 function escposInitialize(printer) {
   // ESC @ (initialize printer): clears buffer/modes on most ESC/POS compatibles
   try {
@@ -57,6 +87,17 @@ function escposAfterImage(printer) {
     printer.alignLeft();
   } catch (e) {
     console.warn('escposAfterImage:', e?.message || e);
+  }
+}
+
+function escposBeforeCut(printer) {
+  // Defensive reset to avoid carrying weird modes across jobs
+  escposInitialize(printer);
+  try {
+    printer.setTextNormal();
+    printer.alignLeft();
+  } catch (e) {
+    console.warn('escposBeforeCut:', e?.message || e);
   }
 }
 
@@ -265,7 +306,7 @@ function startHttpServer() {
     expressApp.post("/finish_order_print", async (req, res) => {
       try {
         const { _printer, orden, items } = req.body;
-        const result = await printOrderData({ _printer, orden, items });
+        const result = await enqueuePrintJob(_printer, () => printOrderData({ _printer, orden, items }));
         
         if (result.success) {
           res.json({ message: "Impresión enviada correctamente" });
@@ -282,7 +323,7 @@ function startHttpServer() {
     expressApp.post("/print", async (req, res) => {
       try {
         const { _ot_id, _printer, doctor, paciente, items, fechasalida, prof } = req.body;
-        const result = await printOTData({ _ot_id, _printer, doctor, paciente, items, fechasalida, prof });
+        const result = await enqueuePrintJob(_printer, () => printOTData({ _ot_id, _printer, doctor, paciente, items, fechasalida, prof }));
         
         if (result.success) {
           res.json({ message: "Impresión enviada correctamente" });
@@ -614,11 +655,11 @@ ipcMain.handle('get-image-path', async () => {
 });
 
 ipcMain.handle('print-order', async (event, printData) => {
-  return await printOrderData(printData);
+  return await enqueuePrintJob(printData?._printer, () => printOrderData(printData));
 });
 
 ipcMain.handle('print-ot', async (event, printData) => {
-  return await printOTData(printData);
+  return await enqueuePrintJob(printData?._printer, () => printOTData(printData));
 });
 
 // Handlers para manejo de logo
@@ -815,12 +856,11 @@ async function printOrderData(printData) {
     printer.println(`Remito: ${orden?.id} `);
     printer.setTextNormal();
     printer.println(`Fecha: ${dayjs().format('DD/MM/YYYY')}`);
+    printer.newLine();
     printer.setTypeFontB();
     printer.setTextDoubleHeight();
     printer.setTextDoubleWidth();
     printer.alignCenter();
-    printer.setTextSize(3,3);
-    printer.newLine();
     printer.println(`X`);
     printer.alignLeft();
     printer.setTextNormal();
@@ -828,7 +868,7 @@ async function printOrderData(printData) {
     printer.println("------------------------------");
     printer.println(`TD/LAB: ${orden?.cliente?.apellido} ${orden?.cliente?.nombre}`);
     printer.setTextNormal();
-    printer.println(`${orden?.cliente?.telefono ?? 'S/Telefono'} - ${orden?.cliente?.email ?? 'Sin emal'}`); 
+    printer.println(`${orden?.cliente?.telefono ?? 'S/Telefono'} - ${orden?.cliente?.email ?? 'Sin email'}`); 
     printer.println(`${orden?.cliente?.direccion ?? 'S/Direccion'} ${orden?.cliente?.localidad ?? 'Sin Localidad'}`); 
     printer.println(`${orden?.cliente?.provincia?.nombre ?? 'S/Provincia'}`);
     
@@ -877,6 +917,7 @@ async function printOrderData(printData) {
       printer.println("------------------------------");
     }
 
+    escposBeforeCut(printer);
     printer.cut({ verticalTabAmount: 1 });
     let execute = await printer.execute();
     console.log("✅ Impresión completada");
@@ -913,14 +954,12 @@ async function printOTData(printData) {
     // Start from a known printer state
     escposInitialize(printer);
     
-    printer.setTextSize(1, 1);
     printer.alignLeft();
     printer.setTypeFontB();
     printer.setTextDoubleHeight();
     printer.setTextDoubleWidth();
     printer.println(`OT: ${_ot_id}`);
     
-    printer.setTextNormal();
     printer.setTextNormal();
     printer.println(`Dr/a: ${doctor}`);
     printer.println(`Paciente: ${paciente}`);
@@ -945,6 +984,7 @@ async function printOTData(printData) {
     
     printer.newLine();
     printer.println(`Cntrl: ${fechaFormateada}`)
+    escposBeforeCut(printer);
     printer.cut({ verticalTabAmount: 1 });
 
     let execute = await printer.execute();
